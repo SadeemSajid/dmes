@@ -11,8 +11,10 @@
 /* Client Handling */
 #include <pthread.h>
 
+#include "common.h"
+#include "room.h"
+#include "client.h"
 #include "crypto.h" // PQC - RLWE
-#include "setup.h"  // Room/Client setups
 
 #define PORT 1337
 #define ROOM_SIZE 24
