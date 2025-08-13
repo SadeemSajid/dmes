@@ -8,16 +8,15 @@
 /* Networking */
 #include <sys/socket.h>
 
-/* Client Handling */
+/* Concurrency */
 #include <pthread.h>
 
+/* Functionality includes */
 #include "common.h"
 #include "room.h"
 #include "client.h"
-#include "crypto.h" // PQC - RLWE
-
-#define PORT 1337
-#define ROOM_SIZE 24
+#include "crypto.h"
+#include "listener.h"
 
 /*
  * Arguments;
@@ -33,44 +32,51 @@ int *room_broadcast;
 
 int main(int argc, char **argv)
 {
+        system("clear"); // Clear the screen
+
+        /* Listens for incoming communication */
+        pthread_t listener;
+
         /* App config init */
-        struct config_params config = {0, PORT, ROOM_SIZE};
+        struct config_params config = {0, PORT, ROOM_SIZE, PORT};
+        listener_args l_config;
 
         /* Parse command line options */
         uint8_t type = parse_args(argc, argv, &config);
+        config.type = type;
 
-        if (type == 0)
+        if (type == DMES_ERROR)
         {
-                printf("ERROR: Unable to parse arguments.\n");
+                printf("[ERROR] Unable to parse arguments.\n");
                 return EXIT_FAILURE;
         }
 
-        /* Room Flow */
-        if (type == 1)
-        {
-                /* Register signal handler */
-                signal(SIGINT, exit_handler);
+        /* Init params and spawn a listener thread */
+        l_config.config = config;
+        l_config.mailbox.ready = 0;
+        pthread_mutex_init(&l_config.mailbox.mutex, NULL);
+        pthread_cond_init(&l_config.mailbox.cond, NULL);
+        pthread_create(&listener, NULL, handle_listener, (void *) &l_config);
 
-                int serverfd = make_server(&config);
-                if (serverfd != -1)
-                {
-                        printf("INFO: Room running on port %d.\n", config.port);
-                }
+        /* Active Client Flow */
+        if (type == DMES_CLIENT_A) {
+                printf("INFO: Active client mode\n");
+                /* Start the session */
+                dmes_connect(&config);
 
-                // Start the room to accept clients
-                initiate_room(&config, serverfd, room_broadcast, &room_curr_size);
-
-                /* Clean App */
-                if (serverfd != -1)
-                        close(serverfd);
-                if (room_curr_size != 0)
-                        free(room_broadcast);
+                /* Shutdown the listener */
+                printf("[INFO] Shutting down listener...\n");
+                pthread_mutex_lock(&l_config.mailbox.mutex);
+                l_config.mailbox.ready = 1;
+                pthread_cond_signal(&l_config.mailbox.cond);
+                pthread_mutex_unlock(&l_config.mailbox.mutex);
         }
-        /* Client Flow */
-        else
-        {
-                printf("INFO: Starting in client mode...\n");
-                int roomfd = connect_room(&config);
+        else if (type == DMES_CLIENT_P) {
+                printf("[INFO] Passive client mode\n");
+                
+                /* Wait for listener thread */
+                pthread_join(listener, NULL);
         }
+
         return 0;
 }

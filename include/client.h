@@ -1,4 +1,6 @@
+#include "common.h"
+
 /*
  * Connects to a room
  * */
-int connect_room(struct config_params *);
+void dmes_connect(struct config_params *);
